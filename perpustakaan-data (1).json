@@ -1,0 +1,134 @@
+{
+  "books": [
+    {
+      "id": "3ca90d09-bc87-4ed0-b879-82823747b499",
+      "isbn": "978-602-444-366-5",
+      "judul": "Ilmu Pengetahuan Alam",
+      "penulis": "Dewi Safitri",
+      "tahun": 1990,
+      "kategori": "ilmiah",
+      "stok": 60
+    },
+    {
+      "id": "57195ad0-d046-4fe2-baf7-f4a0978a2f5d",
+      "isbn": "978-979-015-761-3",
+      "judul": "Matematika",
+      "penulis": "Erlangga",
+      "tahun": 2008,
+      "kategori": "Pelajaran",
+      "stok": 70
+    },
+    {
+      "id": "6fc2ae16-bb57-468a-b733-88eede2f6b60",
+      "isbn": "978-979-25-5480-7",
+      "judul": "Pendidikan Agama Islam",
+      "penulis": "Muchtar",
+      "tahun": 2011,
+      "kategori": "Buku pendidikan",
+      "stok": 60
+    },
+    {
+      "id": "0218d864-25c3-4f00-a49e-7d3abf5833ba",
+      "isbn": "978-602-427-160-0",
+      "judul": "Bahasa Inggris",
+      "penulis": "Utami Wilidiati",
+      "tahun": 2017,
+      "kategori": "Ilmu bahasa",
+      "stok": 50
+    },
+    {
+      "id": "37f0e938-2d61-434e-94a6-b429b08e7f8f",
+      "isbn": "978-623-266-691-7",
+      "judul": "Sejarah",
+      "penulis": "Ratna Hapsari",
+      "tahun": 2024,
+      "kategori": "Nonfiksi",
+      "stok": 10
+    },
+    {
+      "id": "cb7e58cc-58d0-475e-bb6b-e6230fcdde1b",
+      "isbn": "978-623-180-049-7",
+      "judul": "Pendidikan Pancasila dan Kewarganegaraan",
+      "penulis": "Yuyus Kardiman",
+      "tahun": 2023,
+      "kategori": "Buku Pendidikan",
+      "stok": 4
+    },
+    {
+      "id": "d2af78c8-88cf-41e0-b21d-7bc47b046448",
+      "isbn": "978-623-180-412-9",
+      "judul": "Pemasangan dan konfigurasi perangkat jaringan",
+      "penulis": "Andi Novianto",
+      "tahun": 2024,
+      "kategori": "Teknologi Informasi dan Komunikasi",
+      "stok": 5
+    },
+    {
+      "id": "56de3f5f-4035-46d8-b49e-178cd9917ea2",
+      "isbn": "978-623-180-975-9",
+      "judul": "Farmakologi",
+      "penulis": "Hebert Adrianto",
+      "tahun": 2024,
+      "kategori": "ilmu kedokteran dan biologi",
+      "stok": 14
+    },
+    {
+      "id": "88e830b6-d242-4a63-b388-8f8220b247cb",
+      "isbn": "978-623-180-358-0",
+      "judul": "Pendidikan Jasmani, Olahraga, dan Kesehatan",
+      "penulis": "M. Azhar Mustabshirin",
+      "tahun": 2023,
+      "kategori": "buku pelajaran",
+      "stok": 10
+    },
+    {
+      "id": "3f0ac004-6ce2-48b0-9427-e923d10fd2e7",
+      "isbn": "978-623-180-755-7",
+      "judul": "Produk Kreatif dan Kewirausahaan",
+      "penulis": "Andi Navianto",
+      "tahun": 2024,
+      "kategori": "pembelajaran vokasi/kejuruan",
+      "stok": 4
+    }
+  ],
+  "members": [
+    {
+      "id": "c8143823-59d9-4ef3-850f-d7be8ae764d3",
+      "kode": "AG001",
+      "nama": "Achmad Kringo",
+      "kelas": "XII RPL"
+    },
+    {
+      "id": "b9676e3b-0245-49aa-81e8-84ff09d7ac9b",
+      "kode": "AG002",
+      "nama": "Mamang Shop",
+      "kelas": "X TKJ"
+    },
+    {
+      "id": "5fd68e4a-ce8f-443e-980c-84ba5a8eeb1f",
+      "kode": "AG003",
+      "nama": "Ilham Kawasaki",
+      "kelas": "XI FKK"
+    },
+    {
+      "id": "f83b55e5-116f-4d9a-bcf6-90afcedeff05",
+      "kode": "AG004",
+      "nama": "Tauhid Santoso",
+      "kelas": "XII AK"
+    }
+  ],
+  "loans": [
+    {
+      "id": "f681dd83-ddca-443c-9923-9f4dde56d8dc",
+      "memberId": "70e9a80c-06dd-44b1-8486-315e78893d7e",
+      "bookId": "df43ac06-7b6a-4ade-9368-0d1347519fb0",
+      "tanggalPinjam": "2025-09-30",
+      "jatuhTempo": "2025-10-07",
+      "tanggalKembali": null
+    }
+  ],
+  "settings": {
+    "hariPinjam": 7,
+    "dendaPerHari": 1000
+  }
+}
