@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sistem Informasi Perpustakaan</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <h1>SIM Perpustakaan</h1>
+          <div class="muted">Sederhana • Offline (LocalStorage)</div>
+        </div>
+      </div>
+      <nav id="nav"></nav>
+    </div>
+  </header>
+
+  <main class="container" style="margin-top:12px">
+    <div class="grid">
+      <!-- Sidebar quick actions -->
+      <aside class="card" id="quickActions">
+        <p class="section-title">Aksi Cepat</p>
+        <div class="row" style="margin-bottom:10px">
+          <button onclick="openBookForm()">+ Tambah Buku</button>
+          <button onclick="openMemberForm()">+ Tambah Anggota</button>
+        </div>
+        <div class="row">
+          <button class="ok" onclick="openLoanForm()">+ Peminjaman</button>
+          <button class="warn" onclick="returnLoan()">Pengembalian</button>
+        </div>
+        <hr style="border:none;border-top:1px solid #1f2937;margin:16px 0" />
+        <div class="row">
+          <button class="ghost" onclick="exportData()">⬇️ Export Data</button>
+          <button class="ghost" onclick="importData()">⬆️ Import Data</button>
+        </div>
+        <p class="footer">Data disimpan di peramban Anda (LocalStorage). Hapus cache = data hilang.</p>
+      </aside>
+
+      <!-- Content area -->
+      <section>
+        <div id="view-dashboard" class="card"></div>
+        <div id="view-books" class="card hidden"></div>
+        <div id="view-members" class="card hidden"></div>
+        <div id="view-loans" class="card hidden"></div>
+        <div id="view-settings" class="card hidden"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Modals -->
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="content card">
+      <div class="row">
+        <h2 id="modalTitle" style="margin:0"></h2>
+        <div class="spacer"></div>
+        <button class="ghost" onclick="closeModal()">Tutup ✕</button>
+      </div>
+      <div id="modalBody" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <script>
+    // ===== Utilities & Storage =====
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+    const store = {
+      get(k, fallback){
+        try{ return JSON.parse(localStorage.getItem(k)) ?? fallback }catch{ return fallback }
+      },
+      set(k, v){ localStorage.setItem(k, JSON.stringify(v)); }
+    }
+    const uid = () => crypto.randomUUID ? crypto.randomUUID() : (Date.now()+"-"+Math.random().toString(16).slice(2));
+
+    // ===== Data Model =====
+    const DB = {
+      books: store.get('lib_books', []),
+      members: store.get('lib_members', []),
+      loans: store.get('lib_loans', []),
+      settings: store.get('lib_settings', {hariPinjam:7, dendaPerHari:1000})
+    }
+    function persist(){
+      store.set('lib_books', DB.books);
+      store.set('lib_members', DB.members);
+      store.set('lib_loans', DB.loans);
+      store.set('lib_settings', DB.settings);
+      renderAll();
+    }
+
+    // Seed sample data on first load
+    if(DB.books.length === 0 && DB.members.length === 0 && DB.loans.length === 0){
+      DB.books = [
+        {id:uid(), isbn:'9786020324788', judul:'Laskar Pelangi', penulis:'Andrea Hirata', tahun:2005, kategori:'Fiksi', stok:3},
+        {id:uid(), isbn:'9789793062790', judul:'Bumi Manusia', penulis:'Pramoedya A.T.', tahun:1980, kategori:'Sejarah', stok:2},
+        {id:uid(), isbn:'9789797094285', judul:'Negeri 5 Menara', penulis:'A. Fuadi', tahun:2009, kategori:'Motivasi', stok:4},
+        {id:uid(), isbn:'97897200945371', judul:'BHS Italia', penulis:'Rusdi', tahun:2012, kategori:'Motivasi', stok:7}
+      ];
+      DB.members = [
+        {id:uid(), kode:'AG001', nama:'Achmad Kringo', kelas:'XII RPL'},
+        {id:uid(), kode:'AG002', nama:'Mamang Shop', kelas:'X TKJ'},
+        {id:uid(), kode:'AG003', nama:'Ilham Kawasaki', kelas:'XI FKK'},
+        {id:uid(), kode:'AG004', nama:'Tauhid Santoso', kelas:'XII AK'}
+      ];
+      persist();
+    }
+
+    // ===== Navigation =====
+    const routes = [
+      {id:'dashboard', label:'Dashboard', render:renderDashboard},
+      {id:'books', label:'Data Buku', render:renderBooks},
+      {id:'members', label:'Anggota', render:renderMembers},
+      {id:'loans', label:'Peminjaman', render:renderLoans},
+      {id:'settings', label:'Pengaturan', render:renderSettings},
+    ];
+
+    function initNav(){
+      const nav = $('#nav');
+      routes.forEach((r,i)=>{
+        const btn = document.createElement('button');
+        btn.className = 'tab' + (i===0?' active':'');
+        btn.textContent = r.label;
+        btn.onclick = ()=> goto(r.id);
+        btn.dataset.route = r.id;
+        nav.appendChild(btn);
+      })
+    }
+
+    function goto(id){
+      // Activate tab
+      $$('.tab').forEach(b=> b.classList.toggle('active', b.dataset.route===id));
+      // Swap views
+      routes.forEach(r=>{
+        const v = $('#view-'+r.id);
+        v.classList.toggle('hidden', r.id!==id);
+        if(r.id===id){ r.render(v); }
+      })
+    }
+
+    // ===== Dashboard =====
+    function renderDashboard(el){
+      const totalBuku = DB.books.length;
+      const totalAnggota = DB.members.length;
+      const sedangDipinjam = DB.loans.filter(l=>!l.tanggalKembali).length;
+      const telat = lateLoans().length;
+
+      el.innerHTML = `
+        <div class="row" style="align-items:flex-end;gap:16px">
+          <div>
+            <p class="section-title">Ringkasan</p>
+            <h2 style="margin:.2rem 0 0">Dashboard Perpustakaan</h2>
+            <p class="muted">Kelola buku, anggota, serta peminjaman & pengembalian.</p>
+          </div>
+          <div class="spacer"></div>
+          <div class="tag">${new Date().toLocaleString('id-ID')}</div>
+        </div>
+        <div class="kpi" style="margin-top:12px">
+          <div class="item"><h3>Total Buku</h3><p>${totalBuku}</p></div>
+          <div class="item"><h3>Total Anggota</h3><p>${totalAnggota}</p></div>
+          <div class="item"><h3>Sedang Dipinjam</h3><p>${sedangDipinjam}</p></div>
+          <div class="item"><h3>Terlambat</h3><p>${telat}</p></div>
+        </div>
+        <div style="margin-top:16px">
+          <p class="section-title">Aktivitas Terakhir</p>
+          ${renderRecentLoansTable()}
+        </div>
+      `;
+    }
+
+    function renderRecentLoansTable(){
+      const last = [...DB.loans].sort((a,b)=> new Date(b.tanggalPinjam)-new Date(a.tanggalPinjam)).slice(0,5);
+      if(last.length===0) return `<div class="muted">Belum ada transaksi.</div>`;
+      return `
+        <div style="overflow:auto">
+        <table>
+          <thead><tr><th>Anggota</th><th>Judul</th><th>Pinjam</th><th>Jatuh Tempo</th><th>Status</th></tr></thead>
+          <tbody>
+            ${last.map(l=>{
+              const m = DB.members.find(x=>x.id===l.memberId);
+              const b = DB.books.find(x=>x.id===l.bookId);
+              const terlambat = !l.tanggalKembali && new Date() > new Date(l.jatuhTempo);
+              return `<tr>
+                <td>${m?.nama||'-'}</td>
+                <td>${b?.judul||'-'}</td>
+                <td>${fmtDate(l.tanggalPinjam)}</td>
+                <td>${fmtDate(l.jatuhTempo)}</td>
+                <td>${l.tanggalKembali?'<span class="tag">Dikembalikan</span>': (terlambat?'<span class="tag" style="color:#fecaca;border-color:#7a2d2d">Terlambat</span>':'<span class="tag" style="color:#bbf7d0;border-color:#30674a">Dipinjam</span>')}</td>
+              </tr>`
+            }).join('')}
+          </tbody>
+        </table>
+        </div>
+      `;
+    }
+
+    // ===== Books =====
+    function renderBooks(el){
+      const q = (el.dataset.q||'').toLowerCase();
+      const list = DB.books.filter(b=>[b.isbn,b.judul,b.penulis,b.kategori].some(x=>String(x).toLowerCase().includes(q)));
+      el.innerHTML = `
+        <div class="row">
+          <div>
+            <p class="section-title">Data Buku</p>
+            <h2 style="margin:.2rem 0 0">Daftar Koleksi</h2>
+          </div>
+          <div class="spacer"></div>
+          <input placeholder="Cari judul/penulis/ISBN…" value="${el.dataset.q||''}" oninput="this.closest('.card').dataset.q=this.value; renderBooks(this.closest('.card'))" />
+          <button onclick="openBookForm()">+ Buku</button>
+        </div>
+        <div style="overflow:auto; margin-top:12px">
+          <table>
+            <thead><tr><th>ISBN</th><th>Judul</th><th>Penulis</th><th>Tahun</th><th>Kategori</th><th>Stok</th><th>Aksi</th></tr></thead>
+            <tbody>
+              ${list.map(b=>`<tr>
+                <td>${b.isbn}</td>
+                <td>${b.judul}</td>
+                <td>${b.penulis}</td>
+                <td>${b.tahun}</td>
+                <td>${b.kategori}</td>
+                <td>${b.stok}</td>
+                <td class="row">
+                  <button class="ghost" onclick='openBookForm(${JSON.stringify(b)})'>Edit</button>
+                  <button class="danger" onclick="delBook('${b.id}')">Hapus</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function openBookForm(data={}){
+      $('#modalTitle').textContent = data.id? 'Edit Buku' : 'Tambah Buku';
+      $('#modalBody').innerHTML = `
+        <form id="bookForm" onsubmit="saveBook(event)">
+          <input type="hidden" name="id" value="${data.id||''}" />
+          <div class="row">
+            <input name="isbn" required placeholder="ISBN" value="${data.isbn||''}" />
+            <input name="judul" required placeholder="Judul" style="flex:1" value="${data.judul||''}" />
+          </div>
+          <div class="row" style="margin-top:8px">
+            <input name="penulis" required placeholder="Penulis" value="${data.penulis||''}" />
+            <input name="tahun" type="number" min="1800" max="2100" required placeholder="Tahun" value="${data.tahun||''}" />
+            <input name="kategori" placeholder="Kategori" value="${data.kategori||''}" />
+            <input name="stok" type="number" min="0" required placeholder="Stok" value="${data.stok??1}" />
+          </div>
+          <div class="row right" style="margin-top:14px">
+            <button type="button" class="ghost" onclick="closeModal()">Batal</button>
+            <button type="submit" class="ok">Simpan</button>
+          </div>
+        </form>
+      `;
+      openModal();
+    }
+
+    function saveBook(e){
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const data = Object.fromEntries(fd.entries());
+      data.tahun = Number(data.tahun);
+      data.stok = Number(data.stok);
+      if(data.id){
+        const i = DB.books.findIndex(x=>x.id===data.id);
+        if(i>-1) DB.books[i] = {...DB.books[i], ...data};
+      }else{
+        DB.books.push({...data, id:uid()});
+      }
+      persist();
+      closeModal();
+      goto('books');
+    }
+
+    function delBook(id){
+      if(!confirm('Hapus buku ini?')) return;
+      DB.books = DB.books.filter(b=>b.id!==id);
+      persist();
+    }
+
+    // ===== Members =====
+    function renderMembers(el){
+      const q = (el.dataset.q||'').toLowerCase();
+      const list = DB.members.filter(m=>[m.kode,m.nama,m.kelas].some(x=>String(x).toLowerCase().includes(q)));
+      el.innerHTML = `
+        <div class="row">
+          <div>
+            <p class="section-title">Data Anggota</p>
+            <h2 style="margin:.2rem 0 0">Daftar Anggota</h2>
+          </div>
+          <div class="spacer"></div>
+          <input placeholder="Cari nama/kode/kelas…" value="${el.dataset.q||''}" oninput="this.closest('.card').dataset.q=this.value; renderMembers(this.closest('.card'))" />
+          <button onclick="openMemberForm()">+ Anggota</button>
+        </div>
+        <div style="overflow:auto; margin-top:12px">
+          <table>
+            <thead><tr><th>Kode</th><th>Nama</th><th>Kelas</th><th>Aksi</th></tr></thead>
+            <tbody>
+              ${list.map(m=>`<tr>
+                <td>${m.kode}</td>
+                <td>${m.nama}</td>
+                <td>${m.kelas||'-'}</td>
+                <td class="row">
+                  <button class="ghost" onclick='openMemberForm(${JSON.stringify(m)})'>Edit</button>
+                  <button class="danger" onclick="delMember('${m.id}')">Hapus</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function openMemberForm(data={}){
+      $('#modalTitle').textContent = data.id? 'Edit Anggota' : 'Tambah Anggota';
+      $('#modalBody').innerHTML = `
+        <form id="memberForm" onsubmit="saveMember(event)">
+          <input type="hidden" name="id" value="${data.id||''}" />
+          <div class="row">
+            <input name="kode" required placeholder="Kode Anggota (NIS/NIM)" value="${data.kode||''}" />
+            <input name="nama" required placeholder="Nama Lengkap" style="flex:1" value="${data.nama||''}" />
+            <input name="kelas" placeholder="Kelas/Prodi" value="${data.kelas||''}" />
+          </div>
+          <div class="row right" style="margin-top:14px">
+            <button type="button" class="ghost" onclick="closeModal()">Batal</button>
+            <button type="submit" class="ok">Simpan</button>
+          </div>
+        </form>
+      `;
+      openModal();
+    }
+
+    function saveMember(e){
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target).entries());
+      if(data.id){
+        const i = DB.members.findIndex(x=>x.id===data.id);
+        if(i>-1) DB.members[i] = {...DB.members[i], ...data};
+      }else{
+        DB.members.push({...data, id:uid()});
+      }
+      persist();
+      closeModal();
+      goto('members');
+    }
+
+    function delMember(id){
+      if(!confirm('Hapus anggota ini?')) return;
+      DB.members = DB.members.filter(m=>m.id!==id);
+      persist();
+    }
+
+    // ===== Loans =====
+    function renderLoans(el){
+      const q = (el.dataset.q||'').toLowerCase();
+      const list = DB.loans.filter(l=>{
+        const m = DB.members.find(x=>x.id===l.memberId);
+        const b = DB.books.find(x=>x.id===l.bookId);
+        return [m?.nama, m?.kode, b?.judul, b?.isbn].some(x=>String(x||'').toLowerCase().includes(q));
+      });
+      el.innerHTML = `
+        <div class="row">
+          <div>
+            <p class="section-title">Transaksi</p>
+            <h2 style="margin:.2rem 0 0">Peminjaman & Pengembalian</h2>
+          </div>
+          <div class="spacer"></div>
+          <input placeholder="Cari nama/judul/ISBN…" value="${el.dataset.q||''}" oninput="this.closest('.card').dataset.q=this.value; renderLoans(this.closest('.card'))" />
+          <button onclick="openLoanForm()">+ Peminjaman</button>
+        </div>
+        <div style="overflow:auto; margin-top:12px">
+          <table>
+            <thead><tr><th>Anggota</th><th>Buku</th><th>Pinjam</th><th>Jatuh Tempo</th><th>Kembali</th><th>Denda</th><th>Aksi</th></tr></thead>
+            <tbody>
+              ${list.map(l=>{
+                const m = DB.members.find(x=>x.id===l.memberId);
+                const b = DB.books.find(x=>x.id===l.bookId);
+                const denda = calcFine(l);
+                return `<tr>
+                  <td>${m?.nama||'-'} <span class="muted">(${m?.kode||''})</span></td>
+                  <td>${b?.judul||'-'} <span class="muted">(${b?.isbn||''})</span></td>
+                  <td>${fmtDate(l.tanggalPinjam)}</td>
+                  <td>${fmtDate(l.jatuhTempo)}</td>
+                  <td>${l.tanggalKembali?fmtDate(l.tanggalKembali):'-'}</td>
+                  <td>${formatRupiah(denda)}</td>
+                  <td class="row">
+                    ${l.tanggalKembali? '' : `<button class="warn" onclick="returnLoan('${l.id}')">Kembalikan</button>`}
+                    <button class="ghost" onclick='printSlip(${JSON.stringify(l)})'>Cetak Slip</button>
+                    <button class="danger" onclick="delLoan('${l.id}')">Hapus</button>
+                  </td>
+                </tr>`
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function openLoanForm(){
+      if(DB.members.length===0 || DB.books.length===0){
+        alert('Tambahkan anggota dan buku terlebih dahulu.');
+        return;
+      }
+      const optionsMembers = DB.members.map(m=>`<option value="${m.id}">${m.nama} (${m.kode})</option>`).join('');
+      const optionsBooks = DB.books.map(b=>`<option value="${b.id}">${b.judul} — stok ${b.stok}</option>`).join('');
+      $('#modalTitle').textContent = 'Transaksi Peminjaman';
+      const tglNow = new Date();
+      const jatuhTempo = addDays(tglNow, DB.settings.hariPinjam);
+      $('#modalBody').innerHTML = `
+        <form id="loanForm" onsubmit="saveLoan(event)">
+          <div class="row">
+            <label style="min-width:110px">Anggota</label>
+            <select name="memberId" required>${optionsMembers}</select>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <label style="min-width:110px">Buku</label>
+            <select name="bookId" required>${optionsBooks}</select>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <label style="min-width:110px">Tanggal Pinjam</label>
+            <input name="tanggalPinjam" type="date" required value="${toInputDate(tglNow)}" />
+          </div>
+          <div class="row" style="margin-top:8px">
+            <label style="min-width:110px">Jatuh Tempo</label>
+            <input name="jatuhTempo" type="date" required value="${toInputDate(jatuhTempo)}" />
+          </div>
+          <div class="row right" style="margin-top:14px">
+            <button type="button" class="ghost" onclick="closeModal()">Batal</button>
+            <button type="submit" class="ok">Simpan</button>
+          </div>
+        </form>
+      `;
+      openModal();
+    }
+
+    function saveLoan(e){
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target).entries());
+      const book = DB.books.find(b=>b.id===data.bookId);
+      if(!book) return alert('Buku tidak ditemukan');
+      if(book.stok<=0) return alert('Stok buku habis');
+
+      DB.loans.push({
+        id: uid(),
+        memberId: data.memberId,
+        bookId: data.bookId,
+        tanggalPinjam: data.tanggalPinjam,
+        jatuhTempo: data.jatuhTempo,
+        tanggalKembali: null
+      });
+      // reduce stock
+      book.stok -= 1;
+      persist();
+      closeModal();
+      goto('loans');
+    }
+
+    function returnLoan(id){
+      let loan;
+      if(!id){
+        // quick action: choose one that is still borrowed
+        const choose = DB.loans.filter(l=>!l.tanggalKembali);
+        if(choose.length===0) return alert('Tidak ada buku yang sedang dipinjam.');
+        const label = choose.map(l=>{
+          const m = DB.members.find(x=>x.id===l.memberId)?.nama||'-';
+          const b = DB.books.find(x=>x.id===l.bookId)?.judul||'-';
+          return `${l.id} | ${m} - ${b}`;
+        }).join('\n');
+        const input = prompt('Masukkan ID transaksi yang dikembalikan:\n'+label+'\n\nKetik ID di awal baris.');
+        if(!input) return; 
+        loan = DB.loans.find(x=>x.id===input.trim());
+      } else {
+        loan = DB.loans.find(x=>x.id===id);
+      }
+      if(!loan) return alert('Transaksi tidak ditemukan');
+      if(loan.tanggalKembali) return alert('Transaksi ini sudah dikembalikan');
+
+      loan.tanggalKembali = toInputDate(new Date());
+      const book = DB.books.find(b=>b.id===loan.bookId);
+      if(book) book.stok += 1;
+      persist();
+      alert('Pengembalian dicatat. Denda: '+formatRupiah(calcFine(loan)));
+    }
+
+    function delLoan(id){
+      if(!confirm('Hapus transaksi ini?')) return;
+      const l = DB.loans.find(x=>x.id===id);
+      if(l && !l.tanggalKembali){
+        const b = DB.books.find(x=>x.id===l.bookId); if(b) b.stok += 1;
+      }
+      DB.loans = DB.loans.filter(x=>x.id!==id);
+      persist();
+    }
+
+    function calcFine(loan){
+      const rate = Number(DB.settings.dendaPerHari)||0;
+      const due = new Date(loan.jatuhTempo);
+      const ret = loan.tanggalKembali? new Date(loan.tanggalKembali) : new Date();
+      const lateDays = Math.max(0, Math.ceil((ret - due)/(1000*60*60*24)));
+      return lateDays * rate;
+    }
+
+    function lateLoans(){
+      return DB.loans.filter(l=>!l.tanggalKembali && new Date() > new Date(l.jatuhTempo));
+    }
+
+    function printSlip(l){
+      const m = DB.members.find(x=>x.id===l.memberId);
+      const b = DB.books.find(x=>x.id===l.bookId);
+      const w = window.open('', 'SLIP', 'width=520,height=700');
+      const denda = calcFine(l);
+      w.document.write(`
+        <html><head><title>Slip Peminjaman</title>
+        <style>
+          body{font-family:Arial, sans-serif; padding:20px}
+          h2{margin:0 0 10px}
+          table{border-collapse:collapse}
+          td{padding:6px 10px; border:1px solid #ccc}
+        </style>
+        </head><body>
+          <h2>Slip Peminjaman</h2>
+          <table>
+            <tr><td>Nama</td><td>${m?.nama||'-'} (${m?.kode||''})</td></tr>
+            <tr><td>Judul</td><td>${b?.judul||'-'} (${b?.isbn||''})</td></tr>
+            <tr><td>Tanggal Pinjam</td><td>${fmtDate(l.tanggalPinjam)}</td></tr>
+            <tr><td>Jatuh Tempo</td><td>${fmtDate(l.jatuhTempo)}</td></tr>
+            <tr><td>Tanggal Kembali</td><td>${l.tanggalKembali?fmtDate(l.tanggalKembali):'-'}</td></tr>
+            <tr><td>Denda</td><td>${formatRupiah(denda)}</td></tr>
+          </table>
+          <p style="margin-top:20px">Terima kasih telah mematuhi tata tertib perpustakaan.</p>
+          <script>window.print();<\/script>
+        </body></html>
+      `);
+      w.document.close();
+    }
+
+    // ===== Settings =====
+    function renderSettings(el){
+      el.innerHTML = `
+        <div class="row">
+          <div>
+            <p class="section-title">Pengaturan</p>
+            <h2 style="margin:.2rem 0 0">Atur Aturan Peminjaman</h2>
+          </div>
+        </div>
+        <form onsubmit="saveSettings(event)" style="margin-top:10px">
+          <div class="row">
+            <label style="min-width:210px">Maks. Hari Peminjaman</label>
+            <input name="hariPinjam" type="number" min="1" value="${DB.settings.hariPinjam}" />
+          </div>
+          <div class="row" style="margin-top:8px">
+            <label style="min-width:210px">Denda per Hari (Rp)</label>
+            <input name="dendaPerHari" type="number" min="0" value="${DB.settings.dendaPerHari}" />
+          </div>
+          <div class="row right" style="margin-top:14px">
+            <button class="ok">Simpan</button>
+          </div>
+        </form>
+      `;
+    }
+
+    function saveSettings(e){
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      DB.settings.hariPinjam = Number(fd.get('hariPinjam'))||7;
+      DB.settings.dendaPerHari = Number(fd.get('dendaPerHari'))||0;
+      persist(); alert('Pengaturan disimpan');
+    }
+
+    // ===== Import / Export =====
+    function exportData(){
+      const blob = new Blob([JSON.stringify(DB, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'perpustakaan-data.json'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importData(){
+      const inp = document.createElement('input');
+      inp.type='file'; inp.accept='.json,application/json';
+      inp.onchange = ()=>{
+        const file = inp.files[0]; if(!file) return;
+        const fr = new FileReader();
+        fr.onload = ()=>{
+          try{
+            const data = JSON.parse(fr.result);
+            if(data.books && data.members && data.loans){
+              DB.books = data.books; DB.members = data.members; DB.loans = data.loans;
+              if(data.settings) DB.settings = data.settings;
+              persist(); alert('Import berhasil.');
+            }else alert('Format berkas tidak sesuai.');
+          }catch(err){ alert('Gagal membaca berkas: '+err.message) }
+        }
+        fr.readAsText(file);
+      }
+      inp.click();
+    }
+
+    // ===== Modal =====
+    function openModal(){ $('#modal').classList.remove('hidden'); }
+    function closeModal(){ $('#modal').classList.add('hidden'); }
+
+    // ===== Helpers =====
+    function addDays(date, days){ const d = new Date(date); d.setDate(d.getDate()+Number(days||0)); return d }
+    function toInputDate(d){ const x = new Date(d); return x.toISOString().slice(0,10) }
+    function fmtDate(d){ if(!d) return '-'; const x = new Date(d); return x.toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'}) }
+    function formatRupiah(n){ return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR', maximumFractionDigits:0}).format(Number(n||0)) }
+
+    function renderAll(){
+      const active = $('.tab.active')?.dataset.route || 'dashboard';
+      routes.forEach(r=> r.render($('#view-'+r.id)) );
+      goto(active);
+    }
+
+    // ===== Boot =====
+    initNav();
+    renderAll();
+  </script>
+</body>
+</html>
